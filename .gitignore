@@ -1,10 +1,15 @@
-# compiled output
-/dist
-/node_modules
-/build
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
-# Logs
-logs
+
+/dist
+/build
+*.tsbuildinfo
+
+
+logs/
 *.log
 npm-debug.log*
 pnpm-debug.log*
@@ -12,42 +17,48 @@ yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
-# OS
-.DS_Store
 
-# Tests
-/coverage
-/.nyc_output
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
-# IDEs and editors
-/.idea
+
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.idea/
 .project
 .classpath
 .c9/
 *.launch
 .settings/
 *.sublime-workspace
+*.sublime-project
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
 
-# dotenv environment variable files
-.env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
-# temp directory
-.temp
-.tmp
 
-# Runtime data
-pids
+/coverage
+/.nyc_output
+.jest-cache
+
+
+prisma/.env
+
+.temp/
+.tmp/
+*.tmp
 *.pid
 *.seed
 *.pid.lock
