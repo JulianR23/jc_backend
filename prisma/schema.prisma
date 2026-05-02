@@ -13,13 +13,14 @@ datasource db {
 
 /// Usuario del sistema
 model User {
-  id         String   @id @default(uuid()) @map("user_id")
-  customerId String   @map("customer_id")
-  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id         String    @id @default(uuid()) @map("user_id")
+  name       String
+  customerId String?   @map("customer_id")
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
   password   String
-  email      String   @unique
-  role       String   @default("user")
-  createdAt  DateTime @default(now()) @map("created_at")
+  email      String    @unique
+  role       String    @default("user")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@map("users")
 }
@@ -60,7 +61,7 @@ model Warehouse {
   country   String
   city      String
 
-  landShipments Land[]
+  land Land[]
 
   @@map("warehouses")
 }
@@ -69,11 +70,11 @@ model Warehouse {
 model SeaPort {
   id        String   @id @default(uuid()) @map("seaport_id")
   name      String
-  adress  String
+  address   String
   country   String
   city      String
 
-  maritimeShipments Maritime[]
+  maritime Maritime[]
 
   @@map("seaports")
 }
