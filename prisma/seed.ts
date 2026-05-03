@@ -28,7 +28,7 @@ async function main(): Promise<void> {
       create: {
         companyName: 'Empresa Logística SA',
         documentId: '900123456-1',
-        phone: '+573001234567',
+        phone: '3001234567',
         email: 'empresa1@gmail.com',
       },
     }),
@@ -38,7 +38,7 @@ async function main(): Promise<void> {
       create: {
         companyName: 'Transportes Andinos SAS',
         documentId: '800987654-2',
-        phone: '+573007654321',
+        phone: '3007654321',
         email: 'empresa2@gmail.com',
       },
     }),
