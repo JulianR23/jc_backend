@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
 } from '@nestjs/common';
 import {
@@ -55,6 +56,15 @@ export class ShipmentsController {
     return this.shipmentsService.findAll();
   }
 
+  @Get('next-tracking-number')
+  @ApiOperation({ summary: 'Obtener el siguiente número de guía disponible' })
+  @ApiResponse({ status: 200, description: 'Siguiente número de guía' })
+  getNextTrackingNumber(): Promise<{ trackingNumber: string }> {
+    return this.shipmentsService
+      .getNextTrackingNumber()
+      .then((trackingNumber) => ({ trackingNumber }));
+  }
+
   @Get('client/:clientId')
   @ApiOperation({ summary: 'Listar envíos de un cliente específico' })
   @ApiResponse({ status: 200, description: 'Envíos del cliente' })
@@ -70,6 +80,15 @@ export class ShipmentsController {
   @ApiResponse({ status: 404, description: 'Envío no encontrado' })
   findOne(@Param('id') id: string): Promise<ShipmentResponse> {
     return this.shipmentsService.findById(id);
+  }
+
+  @Patch(':id/reject')
+  @ApiOperation({ summary: 'Rechazar un envío' })
+  @ApiResponse({ status: 200, description: 'Envío rechazado' })
+  @ApiResponse({ status: 400, description: 'El envío ya está rechazado' })
+  @ApiResponse({ status: 404, description: 'Envío no encontrado' })
+  reject(@Param('id') id: string): Promise<ShipmentResponse> {
+    return this.shipmentsService.reject(id);
   }
 
   @Delete(':id')

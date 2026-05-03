@@ -47,18 +47,6 @@ export class MaritimeShipmentStrategy implements ShipmentStrategy {
         'La logística marítima requiere el campo portId',
       );
     }
-
-    if (dto.warehouseId) {
-      throw new BadRequestException(
-        'La logística marítima no admite warehouseId',
-      );
-    }
-
-    if (dto.vehiclePlate) {
-      throw new BadRequestException(
-        'La logística marítima no admite vehiclePlate',
-      );
-    }
   }
 
   getDestinationId(dto: CreateShipmentDto): { portId: string } {

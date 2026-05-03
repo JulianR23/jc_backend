@@ -3,6 +3,8 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import type { Queue } from 'bull';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClientsService } from '../clients/clients.service';
 import { LocationsService } from '../location/locations.service';
@@ -11,6 +13,7 @@ import { ShipmentFactory } from './factory/shipment.factory';
 import { CreateShipmentDto, LogisticType } from './models/create-shipment.dto';
 import { ShipmentResponse } from './models/shipment-response.type';
 import { BULK_PROCESSING_THRESHOLD } from './constants/discount.constants';
+import { generateNextTrackingNumber } from '../shared/guide-number.generator';
 
 /**
  * Servicio de envíos — orquesta el Strategy Pattern.
@@ -23,6 +26,7 @@ export class ShipmentsService {
     private readonly clientsService: ClientsService,
     private readonly locationsService: LocationsService,
     private readonly productsService: ProductsService,
+    @InjectQueue('shipments') private readonly shipmentsQueue: Queue,
   ) {}
 
   async create(
@@ -40,22 +44,36 @@ export class ShipmentsService {
     // 4 — Validar existencia del destino de entrega
     await this.validateDestination(dto);
 
-    // 5 — Validar existencia de cada producto y calcular totalUnits
-    const totalUnits = await this.validateItemsAndGetTotal(dto.items);
+    // 5 — Validar existencia de cada producto y calcular totalUnits y basePrice
+    const { totalUnits, basePrice, mergedItems } =
+      await this.validateItemsAndGetTotal(dto.items);
 
-    // 6 — Calcular precios con la estrategia correspondiente
-    const priceCalculation = strategy.calculatePrice(dto.basePrice, totalUnits);
+    // 6 — Generar trackingNumber automático si no se proporciona
+    const trackingNumber =
+      dto.guideNumber || (await this.generateNextTrackingNumber());
+    dto.guideNumber = trackingNumber;
 
-    // 7 — Procesamiento en background si supera el umbral
+    // 7 — Calcular precios con la estrategia correspondiente
+    const priceCalculation = strategy.calculatePrice(basePrice, totalUnits);
+
+    // 8 — Procesamiento en background si supera el umbral
     if (totalUnits > BULK_PROCESSING_THRESHOLD) {
       return this.enqueueBulkShipment(dto, totalUnits, priceCalculation);
     }
 
-    // 8 — Persistir sincrónicamente
-    return this.persistShipment(dto, totalUnits, priceCalculation);
+    // 9 — Persistir sincrónicamente
+    return this.persistShipment(
+      dto,
+      trackingNumber,
+      totalUnits,
+      priceCalculation,
+      mergedItems,
+    );
   }
 
   async findAll(): Promise<ShipmentResponse[]> {
+    await this.autoCompleteByDeliveryDate();
+
     return this.prisma.shipment.findMany({
       include: this.buildIncludes(),
       orderBy: { createdAt: 'desc' },
@@ -85,13 +103,58 @@ export class ShipmentsService {
     });
   }
 
+  async reject(id: string): Promise<ShipmentResponse> {
+    const shipment = await this.findById(id);
+
+    if (shipment.status === 'REJECTED') {
+      throw new BadRequestException(`El envío ya está rechazado`);
+    }
+
+    return this.prisma.shipment.update({
+      where: { id },
+      data: { status: 'REJECTED' },
+      include: this.buildIncludes(),
+    }) as unknown as ShipmentResponse;
+  }
+
   async remove(id: string): Promise<void> {
     await this.findById(id);
 
     await this.prisma.shipment.delete({ where: { id } });
   }
 
+  async getNextTrackingNumber(): Promise<string> {
+    return this.generateNextTrackingNumber();
+  }
+
   //Métodos privados
+
+  private async autoCompleteByDeliveryDate(): Promise<void> {
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+
+    await this.prisma.shipment.updateMany({
+      where: {
+        deliveryDate: { lt: startOfToday },
+        status: { notIn: ['COMPLETED', 'REJECTED', 'FAILED'] },
+      },
+      data: { status: 'COMPLETED' },
+    });
+  }
+
+  /**
+   * Genera el siguiente número de guía (trackingNumber) disponible.
+   * Obtiene todos los shipments existentes y calcula el siguiente número secuencial.
+   * @returns Siguiente trackingNumber en formato AA00000000
+   */
+  private async generateNextTrackingNumber(): Promise<string> {
+    const last = await this.prisma.shipment.findFirst({
+      select: { trackingNumber: true },
+      orderBy: { trackingNumber: 'desc' },
+    });
+
+    return generateNextTrackingNumber(last?.trackingNumber);
+  }
 
   /**
    * Valida que el destino del envío exista según el tipo logístico.
@@ -109,26 +172,55 @@ export class ShipmentsService {
   }
 
   /**
-   * Verifica productos del envío y calcula la suma total de unidades.
-   * @param items Lista de productos y cantidades a enviar.
-   * @returns Total de unidades incluidas en el envío.
+   * Verifica productos del envío, calcula la suma total de unidades
+   * y el precio base como sum(unitPrice * quantity).
+   * @param items Lista de productos, cantidades y precios unitarios.
+   * @returns Total de unidades y precio base del envío.
    */
   private async validateItemsAndGetTotal(
     items: CreateShipmentDto['items'],
-  ): Promise<number> {
+  ): Promise<{
+    totalUnits: number;
+    basePrice: number;
+    mergedItems: CreateShipmentDto['items'];
+  }> {
     if (!items || items.length === 0) {
       throw new BadRequestException('El envío debe tener al menos un producto');
     }
 
+    const itemMap = new Map<string, CreateShipmentDto['items'][number]>();
+    for (const item of items) {
+      const existing = itemMap.get(item.productId);
+      if (existing) {
+        itemMap.set(item.productId, {
+          ...existing,
+          quantity: existing.quantity + item.quantity,
+        });
+      } else {
+        itemMap.set(item.productId, { ...item });
+      }
+    }
+    const mergedItems = Array.from(itemMap.values());
+
     await Promise.all(
-      items.map((item) => this.productsService.findById(item.productId)),
+      mergedItems.map((item) => this.productsService.findById(item.productId)),
     );
 
-    return items.reduce((total, item) => total + item.quantity, 0);
+    const totalUnits = mergedItems.reduce(
+      (total, item) => total + item.quantity,
+      0,
+    );
+    const basePrice = mergedItems.reduce(
+      (total, item) => total + item.unitPrice * item.quantity,
+      0,
+    );
+
+    return { totalUnits, basePrice, mergedItems };
   }
 
   /**
    * Genera una respuesta de encolamiento para envíos masivos.
+   * Crea el shipment con status PENDING y encola el procesamiento de productos.
    * @param dto Datos completos del envío.
    * @param totalUnits Cantidad total de unidades del envío.
    * @param priceCalculation Resultado del cálculo de precios y descuento.
@@ -137,24 +229,46 @@ export class ShipmentsService {
   private async enqueueBulkShipment(
     dto: CreateShipmentDto,
     totalUnits: number,
-    priceCalculation: ReturnType<
-      typeof this.shipmentFactory.createStrategy
-    >['calculatePrice'] extends (...args: never[]) => infer R
-      ? R
-      : never,
+    priceCalculation: {
+      basePrice: import('@prisma/client').Prisma.Decimal;
+      discount: import('@prisma/client').Prisma.Decimal;
+      finalPrice: import('@prisma/client').Prisma.Decimal;
+    },
   ): Promise<{ jobId: string; message: string }> {
-    // Import dinámico para no romper si BullMQ no está configurado aún
-    const { InjectQueue } = await import('@nestjs/bull');
-    void InjectQueue;
+    const trackingNumber =
+      dto.guideNumber || (await this.generateNextTrackingNumber());
 
-    // El job se crea desde ShipmentsModule cuando BullMQ está disponible
-    // Por ahora retornamos el payload que el processor necesitará
-    const jobPayload = { dto, totalUnits, priceCalculation };
-    void jobPayload;
+    // 1. Crear el shipment con status PENDING (sin productos aún)
+    const shipment = await this.prisma.shipment.create({
+      data: {
+        trackingNumber,
+        transportMode: dto.logisticType,
+        customerId: dto.clientId,
+        basePrice: priceCalculation.basePrice,
+        discountValue: priceCalculation.discount,
+        totalCost: priceCalculation.finalPrice,
+        deliveryDate: new Date(dto.deliveryAt),
+        status: 'PROCESSING', // El processor lo cambiarás a COMPLETED
+      },
+    });
+
+    // 2. Encolar el procesamiento de productos
+    const job = await this.shipmentsQueue.add(
+      'bulk-create',
+      {
+        dto,
+        totalUnits,
+        priceCalculation,
+        trackingNumber,
+      },
+      {
+        jobId: `bulk-${shipment.id}`,
+      },
+    );
 
     return {
-      jobId: `bulk-${Date.now()}`,
-      message: `Envío con ${totalUnits} unidades encolado para procesamiento en background. Recibirás confirmación cuando esté listo.`,
+      jobId: String(job.id),
+      message: `Envío con ${totalUnits} unidades encolado para procesamiento en background. Tracking: ${trackingNumber}. El estado se actualizará cuando se complete.`,
     };
   }
 
@@ -167,20 +281,24 @@ export class ShipmentsService {
    */
   private async persistShipment(
     dto: CreateShipmentDto,
+    trackingNumber: string,
     totalUnits: number,
     priceCalculation: {
       basePrice: import('@prisma/client').Prisma.Decimal;
       discount: import('@prisma/client').Prisma.Decimal;
       finalPrice: import('@prisma/client').Prisma.Decimal;
     },
+    mergedItems: CreateShipmentDto['items'],
   ): Promise<ShipmentResponse> {
     const destination = this.shipmentFactory
       .createStrategy(dto.logisticType)
       .getDestinationId(dto);
 
+    // El cast es necesario porque Prisma no infiere el tipo con relaciones
+    // cuando `include` proviene de un método en lugar de un literal inline.
     return this.prisma.shipment.create({
       data: {
-        trackingNumber: dto.guideNumber,
+        trackingNumber,
         transportMode: dto.logisticType,
         customerId: dto.clientId,
         basePrice: priceCalculation.basePrice,
@@ -188,9 +306,10 @@ export class ShipmentsService {
         totalCost: priceCalculation.finalPrice,
         deliveryDate: new Date(dto.deliveryAt),
         products: {
-          create: dto.items.map((item) => ({
+          create: mergedItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
+            unitPrice: item.unitPrice,
           })),
         },
         ...(dto.logisticType === LogisticType.LAND
@@ -212,7 +331,7 @@ export class ShipmentsService {
             }),
       },
       include: this.buildIncludes(),
-    });
+    }) as unknown as ShipmentResponse;
   }
 
   /**

@@ -1,10 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsUUID, Min } from 'class-validator';
+import { IsInt, IsNumber, IsPositive, IsUUID, Min } from 'class-validator';
 
 /**
  * DTO para cada ítem dentro de un envío.
  * Un envío puede tener múltiples ítems (productos con cantidades).
  * La suma de todos los quantity = Shipment.totalUnits.
+ * El basePrice del envío se calcula como sum(unitPrice * quantity).
  *
  * Regla de negocio: quantity debe ser mayor que 0 (Min(1)).
  */
@@ -17,4 +18,9 @@ export class ShipmentItemDto {
   @IsInt({ message: 'La cantidad debe ser un número entero' })
   @Min(1, { message: 'La cantidad debe ser mayor que 0' })
   quantity!: number;
+
+  @ApiProperty({ example: 3000.0 })
+  @IsNumber({}, { message: 'El precio unitario debe ser un número' })
+  @IsPositive({ message: 'El precio unitario debe ser mayor que 0' })
+  unitPrice!: number;
 }

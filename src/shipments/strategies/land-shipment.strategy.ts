@@ -47,16 +47,6 @@ export class LandShipmentStrategy implements ShipmentStrategy {
         'La logística terrestre requiere el campo warehouseId',
       );
     }
-
-    if (dto.portId) {
-      throw new BadRequestException('La logística terrestre no admite portId');
-    }
-
-    if (dto.fleetNumber) {
-      throw new BadRequestException(
-        'La logística terrestre no admite fleetNumber',
-      );
-    }
   }
 
   getDestinationId(dto: CreateShipmentDto): { warehouseId: string } {

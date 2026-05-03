@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/user.service';
 import { AuthResponse, JwtPayload } from './models/auth-response.type';
 import { LoginDto } from './models/login.dto';
@@ -12,27 +13,14 @@ import { RegisterDto } from './models/register.dto';
 
 const SALT_ROUNDS = 10;
 
-/**
- * Servicio de autenticación.
- * Maneja el registro y login de usuarios.
- *
- * Reglas:
- * - El email debe ser único (lanza ConflictException si ya existe)
- * - La contraseña se hashea con bcrypt antes de persistir
- * - El login valida email + contraseña y retorna un JWT
- */
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
+    private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
   ) {}
 
-  /**
-   * Registra un usuario nuevo y devuelve su sesión autenticada.
-   * @param dto Datos de registro con nombre, email y contraseña.
-   * @returns Token de acceso y datos públicos del usuario creado.
-   */
   async register(dto: RegisterDto): Promise<AuthResponse> {
     const existingUser = await this.usersService.findByEmail(dto.email);
 
@@ -42,10 +30,24 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-    const user = await this.usersService.create({
-      name: dto.name,
-      email: dto.email,
-      password: hashedPassword,
+    const user = await this.prisma.$transaction(async (tx) => {
+      const customer = await tx.customer.create({
+        data: {
+          companyName: dto.name,
+          email: dto.email,
+          phone: dto.phone,
+          documentId: dto.nit,
+        },
+      });
+
+      return tx.user.create({
+        data: {
+          name: dto.name,
+          email: dto.email,
+          password: hashedPassword,
+          customerId: customer.id,
+        },
+      });
     });
 
     return this.buildAuthResponse(user);

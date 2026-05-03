@@ -141,6 +141,7 @@ model ShipmentProduct {
   weight     Decimal?     @db.Decimal(10, 2)
   volume     Decimal?     @db.Decimal(10, 2)
   quantity   Int
+  unitPrice  Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
 
   @@id([shipmentId, productId])
   @@map("shipments_products")
