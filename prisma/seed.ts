@@ -23,7 +23,7 @@ async function main(): Promise<void> {
   //Customers
   const customers = await Promise.all([
     prisma.customer.upsert({
-      where: { documentId: '900123456-1' },
+      where: { email: 'empresa1@gmail.com' },
       update: {},
       create: {
         companyName: 'Empresa Logística SA',
@@ -33,7 +33,7 @@ async function main(): Promise<void> {
       },
     }),
     prisma.customer.upsert({
-      where: { documentId: '800987654-2' },
+      where: { email: 'empresa2@gmail.com' },
       update: {},
       create: {
         companyName: 'Transportes Andinos SAS',
@@ -71,53 +71,39 @@ async function main(): Promise<void> {
   console.log('Products creados:', products.length);
 
   //Warehouses
-  const warehouses = await Promise.all([
-    prisma.warehouse.create({
-      data: {
-        name: 'Bodega Norte',
-        address: 'Calle 100 #15-30',
-        country: 'Colombia',
-        city: 'Bogotá',
-      },
+  const warehouseData = [
+    { name: 'Bodega Norte', address: 'Calle 100 #15-30', country: 'Colombia', city: 'Bogotá' },
+    { name: 'Bodega Sur', address: 'Carrera 50 #20-45', country: 'Colombia', city: 'Medellín' },
+  ];
+  const warehouses = await Promise.all(
+    warehouseData.map(async (data) => {
+      const existing = await prisma.warehouse.findFirst({ where: { name: data.name } });
+      return existing ?? (await prisma.warehouse.create({ data }));
     }),
-    prisma.warehouse.create({
-      data: {
-        name: 'Bodega Sur',
-        address: 'Carrera 50 #20-45',
-        country: 'Colombia',
-        city: 'Medellín',
-      },
-    }),
-  ]);
+  );
   console.log('Warehouses creados:', warehouses.length);
 
   //SeaPorts
-  const seaports = await Promise.all([
-    prisma.seaPort.create({
-      data: {
-        name: 'Puerto de Buenaventura',
-        address: 'Av. Simón Bolívar S/N',
-        country: 'Colombia',
-        city: 'Buenaventura',
-      },
+  const seaportData = [
+    { name: 'Puerto de Buenaventura', address: 'Av. Simón Bolívar S/N', country: 'Colombia', city: 'Buenaventura' },
+    { name: 'Puerto de Cartagena', address: 'Manga Terminal Marítimo', country: 'Colombia', city: 'Cartagena' },
+  ];
+  const seaports = await Promise.all(
+    seaportData.map(async (data) => {
+      const existing = await prisma.seaPort.findFirst({ where: { name: data.name } });
+      return existing ?? (await prisma.seaPort.create({ data }));
     }),
-    prisma.seaPort.create({
-      data: {
-        name: 'Puerto de Cartagena',
-        address: 'Manga Terminal Marítimo',
-        country: 'Colombia',
-        city: 'Cartagena',
-      },
-    }),
-  ]);
+  );
   console.log('SeaPorts creados:', seaports.length);
 
   //Shipments
   const deliveryDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // +7 días
   const feb1 = new Date('2026-02-01T00:00:00.000Z');
 
-  const shipmentLand1 = await prisma.shipment.create({
-    data: {
+  const shipmentLand1 = await prisma.shipment.upsert({
+    where: { trackingNumber: 'TRK0000001' },
+    update: {},
+    create: {
       customerId: customers[0].id,
       trackingNumber: 'TRK0000001',
       deliveryDate,
@@ -128,8 +114,10 @@ async function main(): Promise<void> {
     },
   });
 
-  const shipmentLand2 = await prisma.shipment.create({
-    data: {
+  const shipmentLand2 = await prisma.shipment.upsert({
+    where: { trackingNumber: 'TRK0000002' },
+    update: {},
+    create: {
       customerId: customers[1].id,
       trackingNumber: 'TRK0000002',
       deliveryDate,
@@ -140,8 +128,10 @@ async function main(): Promise<void> {
     },
   });
 
-  const shipmentSea1 = await prisma.shipment.create({
-    data: {
+  const shipmentSea1 = await prisma.shipment.upsert({
+    where: { trackingNumber: 'TRK0000003' },
+    update: {},
+    create: {
       customerId: customers[0].id,
       trackingNumber: 'TRK0000003',
       deliveryDate,
@@ -152,8 +142,10 @@ async function main(): Promise<void> {
     },
   });
 
-  const shipmentSea2 = await prisma.shipment.create({
-    data: {
+  const shipmentSea2 = await prisma.shipment.upsert({
+    where: { trackingNumber: 'TRK0000004' },
+    update: {},
+    create: {
       customerId: customers[1].id,
       trackingNumber: 'TRK0000004',
       deliveryDate: feb1,
@@ -168,53 +160,30 @@ async function main(): Promise<void> {
 
   //Land
   await prisma.land.createMany({
+    skipDuplicates: true,
     data: [
-      {
-        shipmentId: shipmentLand1.id,
-        warehouseId: warehouses[0].id,
-        licensePlate: 'ABC123',
-      },
-      {
-        shipmentId: shipmentLand2.id,
-        warehouseId: warehouses[1].id,
-        licensePlate: 'XYZ789',
-      },
+      { shipmentId: shipmentLand1.id, warehouseId: warehouses[0].id, licensePlate: 'ABC123' },
+      { shipmentId: shipmentLand2.id, warehouseId: warehouses[1].id, licensePlate: 'XYZ789' },
     ],
   });
   console.log('Land records creados: 2');
 
   //Maritime
   await prisma.maritime.createMany({
+    skipDuplicates: true,
     data: [
-      {
-        shipmentId: shipmentSea1.id,
-        seaPortId: seaports[0].id,
-        fleetNumber: 'FLEET001',
-      },
-      {
-        shipmentId: shipmentSea2.id,
-        seaPortId: seaports[1].id,
-        fleetNumber: 'FLEET002',
-      },
+      { shipmentId: shipmentSea1.id, seaPortId: seaports[0].id, fleetNumber: 'FLEET001' },
+      { shipmentId: shipmentSea2.id, seaPortId: seaports[1].id, fleetNumber: 'FLEET002' },
     ],
   });
   console.log('Maritime records creados: 2');
 
   //ShipmentProducts
   await prisma.shipmentProduct.createMany({
+    skipDuplicates: true,
     data: [
-      {
-        shipmentId: shipmentLand1.id,
-        productId: products[0].id,
-        quantity: 5,
-        unitPrice: 1500000,
-      },
-      {
-        shipmentId: shipmentSea1.id,
-        productId: products[1].id,
-        quantity: 100,
-        unitPrice: 25000,
-      },
+      { shipmentId: shipmentLand1.id, productId: products[0].id, quantity: 5, unitPrice: 1500000 },
+      { shipmentId: shipmentSea1.id, productId: products[1].id, quantity: 100, unitPrice: 25000 },
     ],
   });
   console.log('ShipmentProducts creados: 2');

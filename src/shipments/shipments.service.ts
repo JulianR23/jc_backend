@@ -124,7 +124,8 @@ export class ShipmentsService {
         await this.locationsService.findWarehouseById(dto.warehouseId);
         landUpdate.warehouseId = dto.warehouseId;
       }
-      if (Object.keys(landUpdate).length > 0) data.land = { update: landUpdate };
+      if (Object.keys(landUpdate).length > 0)
+        data.land = { update: landUpdate };
     }
 
     if (shipment.transportMode === 'MARITIME') {
@@ -191,6 +192,7 @@ export class ShipmentsService {
    */
   private async generateNextTrackingNumber(): Promise<string> {
     const last = await this.prisma.shipment.findFirst({
+      where: { trackingNumber: { startsWith: 'AA' } },
       select: { trackingNumber: true },
       orderBy: { trackingNumber: 'desc' },
     });
