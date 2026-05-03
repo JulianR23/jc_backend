@@ -83,11 +83,13 @@ export class AuthService {
     id: string;
     name: string;
     email: string;
+    role: string;
   }): AuthResponse {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
       name: user.name,
+      role: user.role,
     };
 
     return {
@@ -96,6 +98,7 @@ export class AuthService {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: user.role,
       },
     };
   }

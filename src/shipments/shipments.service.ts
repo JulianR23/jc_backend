@@ -11,6 +11,7 @@ import { LocationsService } from '../location/locations.service';
 import { ProductsService } from '../products/products.service';
 import { ShipmentFactory } from './factory/shipment.factory';
 import { CreateShipmentDto, LogisticType } from './models/create-shipment.dto';
+import { UpdateShipmentDto } from './models/update-shipment.dto';
 import { ShipmentResponse } from './models/shipment-response.type';
 import { BULK_PROCESSING_THRESHOLD } from './constants/discount.constants';
 import { generateNextTrackingNumber } from '../shared/guide-number.generator';
@@ -101,6 +102,47 @@ export class ShipmentsService {
       include: this.buildIncludes(),
       orderBy: { createdAt: 'desc' },
     });
+  }
+
+  async update(id: string, dto: UpdateShipmentDto): Promise<ShipmentResponse> {
+    const shipment = await this.findById(id);
+
+    if (shipment.status === 'COMPLETED') {
+      throw new BadRequestException(
+        `El envío ya está completado y no puede ser modificado`,
+      );
+    }
+
+    const data: Record<string, unknown> = {};
+
+    if (dto.deliveryAt) data.deliveryDate = new Date(dto.deliveryAt);
+
+    if (shipment.transportMode === 'LAND') {
+      const landUpdate: Record<string, unknown> = {};
+      if (dto.vehiclePlate) landUpdate.licensePlate = dto.vehiclePlate;
+      if (dto.warehouseId) {
+        await this.locationsService.findWarehouseById(dto.warehouseId);
+        landUpdate.warehouseId = dto.warehouseId;
+      }
+      if (Object.keys(landUpdate).length > 0) data.land = { update: landUpdate };
+    }
+
+    if (shipment.transportMode === 'MARITIME') {
+      const maritimeUpdate: Record<string, unknown> = {};
+      if (dto.fleetNumber) maritimeUpdate.fleetNumber = dto.fleetNumber;
+      if (dto.portId) {
+        await this.locationsService.findPortById(dto.portId);
+        maritimeUpdate.seaPortId = dto.portId;
+      }
+      if (Object.keys(maritimeUpdate).length > 0)
+        data.maritime = { update: maritimeUpdate };
+    }
+
+    return this.prisma.shipment.update({
+      where: { id },
+      data,
+      include: this.buildIncludes(),
+    }) as unknown as ShipmentResponse;
   }
 
   async reject(id: string): Promise<ShipmentResponse> {

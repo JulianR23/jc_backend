@@ -10,6 +10,7 @@ import { RequestLoggerMiddleware } from './middleware/request-logger.middleware'
 /**
  * Módulo Core.
  * Registra de forma global todos los artefactos transversales de la aplicación: filtros, guards, interceptors y middleware.
+ * Orden de guards importante: JwtAuthGuard primero (autentica), RolesGuard después (autoriza).
  */
 @Module({
   providers: [

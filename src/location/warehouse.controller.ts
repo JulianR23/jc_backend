@@ -16,6 +16,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { Warehouse } from '@prisma/client';
+import { Roles } from '../core/decorators/roles.decorator';
 import { LocationsService } from './locations.service';
 import { CreateWarehouseDto } from './models/create-warehouse.dto';
 import { UpdateWarehouseDto } from './models/update-warehouse.dto';
@@ -31,9 +32,11 @@ export class WarehousesController {
   constructor(private readonly locationsService: LocationsService) {}
 
   @Post()
+  @Roles('admin')
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Crear una bodega' })
+  @ApiOperation({ summary: 'Crear una bodega [admin]' })
   @ApiResponse({ status: 201, description: 'Bodega creada exitosamente' })
+  @ApiResponse({ status: 403, description: 'Requiere rol admin' })
   create(@Body() dto: CreateWarehouseDto): Promise<Warehouse> {
     return this.locationsService.createWarehouse(dto);
   }
@@ -52,8 +55,10 @@ export class WarehousesController {
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Actualizar una bodega' })
+  @Roles('admin')
+  @ApiOperation({ summary: 'Actualizar una bodega [admin]' })
   @ApiResponse({ status: 404, description: 'Bodega no encontrada' })
+  @ApiResponse({ status: 403, description: 'Requiere rol admin' })
   update(
     @Param('id') id: string,
     @Body() dto: UpdateWarehouseDto,
@@ -62,9 +67,11 @@ export class WarehousesController {
   }
 
   @Delete(':id')
+  @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Eliminar una bodega' })
+  @ApiOperation({ summary: 'Eliminar una bodega [admin]' })
   @ApiResponse({ status: 204, description: 'Bodega eliminada' })
+  @ApiResponse({ status: 403, description: 'Requiere rol admin' })
   remove(@Param('id') id: string): Promise<void> {
     return this.locationsService.removeWarehouse(id);
   }

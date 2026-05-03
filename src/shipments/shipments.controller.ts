@@ -15,7 +15,9 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Roles } from '../core/decorators/roles.decorator';
 import { CreateShipmentDto } from './models/create-shipment.dto';
+import { UpdateShipmentDto } from './models/update-shipment.dto';
 import { ShipmentResponse } from './models/shipment-response.type';
 import { ShipmentsService } from './shipments.service';
 
@@ -82,6 +84,21 @@ export class ShipmentsController {
     return this.shipmentsService.findById(id);
   }
 
+  @Patch(':id')
+  @ApiOperation({ summary: 'Actualizar un envío' })
+  @ApiResponse({ status: 200, description: 'Envío actualizado' })
+  @ApiResponse({
+    status: 400,
+    description: 'El envío ya está completado y no puede ser modificado',
+  })
+  @ApiResponse({ status: 404, description: 'Envío no encontrado' })
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateShipmentDto,
+  ): Promise<ShipmentResponse> {
+    return this.shipmentsService.update(id, dto);
+  }
+
   @Patch(':id/reject')
   @ApiOperation({ summary: 'Rechazar un envío' })
   @ApiResponse({ status: 200, description: 'Envío rechazado' })
@@ -92,9 +109,11 @@ export class ShipmentsController {
   }
 
   @Delete(':id')
+  @Roles('admin')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Eliminar un envío' })
+  @ApiOperation({ summary: 'Eliminar un envío [admin]' })
   @ApiResponse({ status: 204, description: 'Envío eliminado' })
+  @ApiResponse({ status: 403, description: 'Requiere rol admin' })
   @ApiResponse({ status: 404, description: 'Envío no encontrado' })
   remove(@Param('id') id: string): Promise<void> {
     return this.shipmentsService.remove(id);
