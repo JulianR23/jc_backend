@@ -1,0 +1,146 @@
+//Prisma Client
+generator client {
+  provider = "prisma-client-js"
+}
+
+//Datasource
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Models
+
+/// Usuario del sistema
+model User {
+  id         String    @id @default(uuid()) @map("user_id")
+  name       String
+  customerId String?   @map("customer_id")
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  password   String
+  email      String    @unique
+  role       String    @default("user")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@map("users")
+}
+
+/// Cliente que solicita los envíos
+model Customer {
+  id          String   @id @default(uuid()) @map("customer_id")
+  companyName String   @map("company_name")
+  documentId  String   @unique @map("document_id")
+  phone       String
+  email       String   @unique
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  users       User[]
+  shipments   Shipment[]
+
+  @@map("customers")
+}
+
+/// Tipo de producto que se puede transportar
+model Product {
+  id          String   @id @default(uuid()) @map("product_id")
+  typeProduct String   @map("type_product")
+  name        String
+  description String?
+  sku         String   @unique
+
+  shipments   ShipmentProduct[]
+
+  @@map("products")
+}
+
+/// Bodega de almacenamiento terrestre
+model Warehouse {
+  id        String   @id @default(uuid()) @map("warehouse_id")
+  name      String
+  address   String
+  country   String
+  city      String
+
+  land Land[]
+
+  @@map("warehouses")
+}
+
+/// Puerto marítimo nacional o internacional
+model SeaPort {
+  id        String   @id @default(uuid()) @map("seaport_id")
+  name      String
+  address   String
+  country   String
+  city      String
+
+  maritime Maritime[]
+
+  @@map("seaports")
+}
+
+/// Envío base — puede ser terrestre o marítimo (especialización)
+model Shipment {
+  id             String   @id @default(uuid()) @map("shipment_id")
+  customerId     String   @map("customer_id")
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  trackingNumber String   @unique @map("tracking_number") @db.VarChar(10)
+  createdAt      DateTime @default(now()) @map("created_at")
+  deliveryDate   DateTime @map("delivery_date")
+  basePrice      Decimal  @map("base_price") @db.Decimal(10, 2)
+  discountValue  Decimal  @default(0) @map("discount_value") @db.Decimal(10, 2)
+  totalCost      Decimal  @map("total_cost") @db.Decimal(10, 2)
+  transportMode  String   @map("transport_mode")
+  status         String   @default("PENDING")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  /// Especializaciones
+  land     Land?
+  maritime Maritime?
+
+  /// Items del envío
+  products ShipmentProduct[]
+
+  @@map("shipments")
+}
+
+/// Envío terrestre
+model Land {
+  shipmentId   String   @id @map("shipment_id")
+  shipment     Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  warehouseId  String   @map("warehouse_id")
+  warehouse    Warehouse @relation(fields: [warehouseId], references: [id])
+
+  licensePlate String   @map("license_plate") @db.VarChar(6)
+
+  @@map("land")
+}
+
+/// Envío marítimo
+model Maritime {
+  shipmentId  String   @id @map("shipment_id")
+  shipment    Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  seaPortId   String   @map("seaport_id")
+  seaPort     SeaPort  @relation(fields: [seaPortId], references: [id])
+
+  fleetNumber String   @map("fleet_number") @db.VarChar(8)
+
+  @@map("maritime")
+}
+
+/// Ítem de un envío
+model ShipmentProduct {
+  shipmentId String   @map("shipment_id")
+  shipment   Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  productId  String   @map("product_id")
+  product    Product  @relation(fields: [productId], references: [id])
+
+  quantity   Int
+  unitPrice  Decimal  @default(0) @map("unit_price") @db.Decimal(10, 2)
+
+  @@id([shipmentId, productId])
+  @@map("shipments_products")
+}
