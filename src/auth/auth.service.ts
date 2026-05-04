@@ -30,24 +30,12 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
 
-    const user = await this.prisma.$transaction(async (tx) => {
-      const customer = await tx.customer.create({
-        data: {
-          companyName: dto.name,
-          email: dto.email,
-          phone: dto.phone,
-          documentId: dto.nit,
-        },
-      });
-
-      return tx.user.create({
-        data: {
-          name: dto.name,
-          email: dto.email,
-          password: hashedPassword,
-          customerId: customer.id,
-        },
-      });
+    const user = await this.prisma.user.create({
+      data: {
+        name: dto.name,
+        email: dto.email,
+        password: hashedPassword,
+      },
     });
 
     return this.buildAuthResponse(user);
